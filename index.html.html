@@ -78,7 +78,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, query, onSnapshot, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+
         // DOM Elements
         const generateBtn = document.getElementById('generate-btn');
         const loader = document.getElementById('loader');
@@ -259,8 +259,7 @@
                     const entryDiv = document.createElement('div');
                     entryDiv.className = 'bg-white/60 p-4 rounded-lg shadow-sm animate-fade-in';
 
-                    const date = entry.createdAt ? entry.createdAt.toDate().toLocaleDateOnce you have this file saved on your computer, you can use the simple drag-and-drop method at Netlify that we talked about to get it online. Let me know if you have any other questions!
-'en-US', {
+                    const date = entry.createdAt ? entry.createdAt.toDate().toLocaleDateString('en-US', {
                         year: 'numeric', month: 'long', day: 'numeric'
                     }) : 'Just now';
 
@@ -278,15 +277,11 @@
                 });
             }
         }
-...
-   
-        
-    
+
         // --- Event Listeners ---
         generateBtn.addEventListener('click', generateJournalEntry);
         saveBtn.addEventListener('click', saveCurrentEntry);
     </script>
 </body>
 </html>
-
 
