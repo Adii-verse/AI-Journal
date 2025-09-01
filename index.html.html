@@ -76,7 +76,7 @@
     <script type="module">
         // Firebase Imports
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, query, onSnapshot, serverTimestamp, setLogLevel, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // DOM Elements
@@ -94,13 +94,32 @@
         let db;
 
         // --- Firebase Initialization ---
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'ai-journal-app';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
 
-        if (!firebaseConfig) {
-            console.error("Firebase config is not available.");
-            // Display an error to the user
-            journalHistory.innerHTML = '<p class="text-center text-red-500">Could not connect to the database. Please try again later.</p>';
+        // PASTE YOUR FIREBASE CONFIGURATION OBJECT HERE
+        // 1. Go to https://console.firebase.google.com/
+        // 2. Create a new project.
+        // 3. Add a "Web App" (the </> icon).
+        // 4. Copy the `firebaseConfig` object and paste it below, replacing the placeholder.
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+        // END OF FIREBASE CONFIGURATION
+        
+        const appId = firebaseConfig.appId || 'default-app-id';
+
+        if (!firebaseConfig || firebaseConfig.apiKey === "YOUR_API_KEY") {
+            console.error("Firebase config is not available or has not been configured.");
+            journalHistory.innerHTML = `
+                <div class="text-center text-red-700 p-4 bg-red-100 rounded-lg border border-red-200">
+                    <p class="font-bold mb-1">Configuration Needed!</p>
+                    <p class="text-sm">To connect to the database, you need to add your personal Firebase project keys. Please follow the instructions in the script section of this HTML file.</p>
+                </div>
+            `;
         } else {
             try {
                 const app = initializeApp(firebaseConfig);
@@ -114,21 +133,13 @@
                         console.log("User is signed in with UID:", currentUserId);
                         fetchAndRenderEntries();
                     } else {
-                        console.log("No user signed in, attempting to sign in...");
-                        try {
-                            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                                await signInWithCustomToken(auth, __initial_auth_token);
-                            } else {
-                                await signInAnonymously(auth);
-                            }
-                        } catch (error) {
-                            console.error("Error signing in:", error);
-                        }
+                        console.log("No user signed in, attempting to sign in anonymously...");
+                        await signInAnonymously(auth);
                     }
                 });
             } catch (e) {
                 console.error("Error initializing Firebase:", e);
-                journalHistory.innerHTML = '<p class="text-center text-red-500">Could not initialize the application.</p>';
+                journalHistory.innerHTML = '<p class="text-center text-red-500">Could not initialize the application. Please check your Firebase configuration.</p>';
             }
         }
         
