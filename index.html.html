@@ -74,11 +74,6 @@
     </div>
 
     <script type="module">
-        // Firebase Imports
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, query, onSnapshot, serverTimestamp, setLogLevel, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
         // DOM Elements
         const generateBtn = document.getElementById('generate-btn');
         const loader = document.getElementById('loader');
@@ -89,60 +84,13 @@
         const emptyState = document.getElementById('empty-state');
         
         // App State
-        let currentUserId = null;
         let currentGeneratedEntry = null;
-        let db;
 
-        // --- Firebase Initialization ---
+        // --- App Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchAndRenderEntries();
+        });
 
-        // PASTE YOUR FIREBASE CONFIGURATION OBJECT HERE
-        // 1. Go to https://console.firebase.google.com/
-        // 2. Create a new project.
-        // 3. Add a "Web App" (the </> icon).
-        // 4. Copy the `firebaseConfig` object and paste it below, replacing the placeholder.
-        const firebaseConfig = {
-            apiKey: "YOUR_API_KEY",
-            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-            projectId: "YOUR_PROJECT_ID",
-            storageBucket: "YOUR_PROJECT_ID.appspot.com",
-            messagingSenderId: "YOUR_SENDER_ID",
-            appId: "YOUR_APP_ID"
-        };
-        // END OF FIREBASE CONFIGURATION
-        
-        const appId = firebaseConfig.appId || 'default-app-id';
-
-        if (!firebaseConfig || firebaseConfig.apiKey === "YOUR_API_KEY") {
-            console.error("Firebase config is not available or has not been configured.");
-            journalHistory.innerHTML = `
-                <div class="text-center text-red-700 p-4 bg-red-100 rounded-lg border border-red-200">
-                    <p class="font-bold mb-1">Configuration Needed!</p>
-                    <p class="text-sm">To connect to the database, you need to add your personal Firebase project keys. Please follow the instructions in the script section of this HTML file.</p>
-                </div>
-            `;
-        } else {
-            try {
-                const app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                const auth = getAuth(app);
-                setLogLevel('debug');
-
-                onAuthStateChanged(auth, async (user) => {
-                    if (user) {
-                        currentUserId = user.uid;
-                        console.log("User is signed in with UID:", currentUserId);
-                        fetchAndRenderEntries();
-                    } else {
-                        console.log("No user signed in, attempting to sign in anonymously...");
-                        await signInAnonymously(auth);
-                    }
-                });
-            } catch (e) {
-                console.error("Error initializing Firebase:", e);
-                journalHistory.innerHTML = '<p class="text-center text-red-500">Could not initialize the application. Please check your Firebase configuration.</p>';
-            }
-        }
-        
         // --- AI Model Interaction ---
         async function generateJournalEntry() {
             generateBtn.disabled = true;
@@ -153,7 +101,7 @@
 
             const systemPrompt = "You are an inspiring and compassionate motivational coach. Your goal is to write a short, personal, and uplifting journal entry. Write in the first person (using 'I', 'my', 'me'). The entry should be reflective, positive, and end with a gentle, actionable piece of advice or a thought-provoking question for the day. Keep it concise, around 3-4 sentences.";
             const userQuery = "Write today's motivational journal entry for me.";
-            const apiKey = ""; // API key is handled by the environment.
+            const apiKey = ""; // API key is handled by the environment if needed.
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
             const payload = {
                 contents: [{ parts: [{ text: userQuery }] }],
@@ -206,67 +154,58 @@
             generateBtn.classList.remove('opacity-50', 'cursor-not-allowed');
         }
 
-        // --- Firestore Database Functions ---
-        async function saveCurrentEntry() {
-            if (!currentGeneratedEntry || !currentUserId || !db) return;
+        // --- LocalStorage Database Functions ---
+        function getEntriesFromStorage() {
+            const entries = localStorage.getItem('journalEntries');
+            return entries ? JSON.parse(entries) : [];
+        }
+
+        function saveEntriesToStorage(entries) {
+            localStorage.setItem('journalEntries', JSON.stringify(entries));
+        }
+
+        function saveCurrentEntry() {
+            if (!currentGeneratedEntry) return;
 
             saveBtn.disabled = true;
             saveBtn.innerText = "Saving...";
+            
+            const newEntry = {
+                id: Date.now().toString(), // Use timestamp as a simple unique ID
+                text: currentGeneratedEntry,
+                createdAt: new Date().toISOString()
+            };
 
-            try {
-                const docRef = await addDoc(collection(db, `artifacts/${appId}/users/${currentUserId}/journalEntries`), {
-                    text: currentGeneratedEntry,
-                    createdAt: serverTimestamp()
-                });
-                console.log("Document written with ID: ", docRef.id);
-                
-                // Reset UI after saving
-                currentGeneratedEntry = null;
-                generatedEntryContainer.classList.add('hidden');
-                generatedText.innerText = "";
-                
-            } catch (e) {
-                console.error("Error adding document: ", e);
-                // Optionally show an error message to the user
-            } finally {
-                 saveBtn.disabled = false;
-                 saveBtn.innerText = "Save Entry";
-            }
+            const entries = getEntriesFromStorage();
+            entries.push(newEntry);
+            saveEntriesToStorage(entries);
+            
+            console.log("Entry saved to localStorage with ID:", newEntry.id);
+            
+            // Reset UI after saving
+            currentGeneratedEntry = null;
+            generatedEntryContainer.classList.add('hidden');
+            generatedText.innerText = "";
+            
+            saveBtn.disabled = false;
+            saveBtn.innerText = "Save Entry";
+
+            fetchAndRenderEntries(); // Re-render the list
         }
 
         function fetchAndRenderEntries() {
-            if (!currentUserId || !db) return;
-            const entriesCollection = collection(db, `artifacts/${appId}/users/${currentUserId}/journalEntries`);
-            const q = query(entriesCollection);
-
-            onSnapshot(q, (querySnapshot) => {
-                const entries = [];
-                querySnapshot.forEach((doc) => {
-                    entries.push({ id: doc.id, ...doc.data() });
-                });
-
-                // Sort entries by date, newest first. Firestore Timestamps can be compared.
-                entries.sort((a, b) => {
-                    const dateA = a.createdAt ? a.createdAt.toMillis() : 0;
-                    const dateB = b.createdAt ? b.createdAt.toMillis() : 0;
-                    return dateB - dateA;
-                });
-
-                renderEntries(entries);
-            }, (error) => {
-                console.error("Error fetching entries:", error);
-                journalHistory.innerHTML = `<p class="text-center text-red-500">Could not load journal history.</p>`;
-            });
+            const entries = getEntriesFromStorage();
+            // Sort entries by date, newest first.
+            entries.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            renderEntries(entries);
         }
         
-        async function deleteEntry(id) {
-            if (!currentUserId || !db || !id) return;
-            try {
-                await deleteDoc(doc(db, `artifacts/${appId}/users/${currentUserId}/journalEntries`, id));
-                console.log("Document successfully deleted!");
-            } catch (error) {
-                console.error("Error removing document: ", error);
-            }
+        function deleteEntry(id) {
+            let entries = getEntriesFromStorage();
+            entries = entries.filter(entry => entry.id !== id);
+            saveEntriesToStorage(entries);
+            console.log("Document successfully deleted from localStorage!");
+            fetchAndRenderEntries(); // Re-render the list
         }
 
         function renderEntries(entries) {
@@ -275,15 +214,15 @@
             if (entries.length === 0) {
                 journalHistory.appendChild(emptyState);
             } else {
-                emptyState.remove();
+                if (emptyState) emptyState.remove();
                 entries.forEach(entry => {
                     const entryDiv = document.createElement('div');
                     entryDiv.className = 'relative bg-white/60 p-4 rounded-lg shadow-sm animate-fade-in';
                     entryDiv.dataset.id = entry.id;
 
-                    const date = entry.createdAt ? entry.createdAt.toDate().toLocaleDateString('en-US', {
+                    const date = new Date(entry.createdAt).toLocaleDateString('en-US', {
                         year: 'numeric', month: 'long', day: 'numeric'
-                    }) : 'Just now';
+                    });
 
                     const dateP = document.createElement('p');
                     dateP.className = 'text-sm font-semibold text-gray-600 mb-2';
