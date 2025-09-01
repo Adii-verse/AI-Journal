@@ -39,6 +39,19 @@
         </header>
 
         <main>
+            <!-- API Key Setup -->
+            <div id="api-key-setup" class="hidden mb-8 p-6 rounded-2xl shadow-lg bg-yellow-100 border border-yellow-200">
+                 <h2 class="text-xl font-semibold mb-3 text-yellow-800">Action Required: Add API Key</h2>
+                 <p class="text-yellow-700 mb-4 text-sm">To generate journal entries, you need a free Google AI API Key. Your key will be saved securely in your browser.</p>
+                 <div class="flex flex-col sm:flex-row gap-2">
+                     <input type="password" id="api-key-input" placeholder="Paste your Google AI API Key here" class="flex-grow p-2 rounded-md border border-yellow-400 focus:ring-2 focus:ring-yellow-500 focus:outline-none">
+                     <button id="save-api-key-btn" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-md transition-colors">Save Key</button>
+                 </div>
+                 <p class="text-xs text-yellow-600 mt-2">
+                    <a href="https://aistudio.google.com/app/apikey" target="_blank" class="underline hover:text-yellow-800">Click here to get your API key from Google AI Studio.</a>
+                 </p>
+            </div>
+
             <!-- AI Generation Section -->
             <div class="mb-8 p-6 rounded-2xl shadow-lg journal-card">
                 <h2 class="text-2xl font-semibold mb-4 text-center">Today's Inspiration</h2>
@@ -82,17 +95,53 @@
         const saveBtn = document.getElementById('save-btn');
         const journalHistory = document.getElementById('journal-history');
         const emptyState = document.getElementById('empty-state');
+        const apiKeySetup = document.getElementById('api-key-setup');
+        const apiKeyInput = document.getElementById('api-key-input');
+        const saveApiKeyBtn = document.getElementById('save-api-key-btn');
         
         // App State
         let currentGeneratedEntry = null;
+        const API_KEY_STORAGE = 'AIzaSyD99erlbk1VUt4Q0xdVUN5gFd-NJUclke8';
 
         // --- App Initialization ---
         document.addEventListener('DOMContentLoaded', () => {
+            checkApiKey();
             fetchAndRenderEntries();
         });
 
+        function checkApiKey() {
+            const apiKey = localStorage.getItem(API_KEY_STORAGE);
+            if (!apiKey) {
+                apiKeySetup.classList.remove('hidden');
+                generateBtn.disabled = true;
+                generateBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                apiKeySetup.classList.add('hidden');
+                generateBtn.disabled = false;
+                generateBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        }
+
+        function saveApiKey() {
+            const apiKey = apiKeyInput.value.trim();
+            if (apiKey) {
+                localStorage.setItem(API_KEY_STORAGE, apiKey);
+                apiKeyInput.value = '';
+                checkApiKey();
+                alert('API Key saved successfully!');
+            } else {
+                alert('Please enter a valid API Key.');
+            }
+        }
+
         // --- AI Model Interaction ---
         async function generateJournalEntry() {
+            const apiKey = localStorage.getItem(API_KEY_STORAGE);
+            if (!apiKey) {
+                alert("Please add your Google AI API Key first.");
+                return;
+            }
+
             generateBtn.disabled = true;
             generateBtn.classList.add('opacity-50', 'cursor-not-allowed');
             loader.classList.remove('hidden');
@@ -101,57 +150,43 @@
 
             const systemPrompt = "You are an inspiring and compassionate motivational coach. Your goal is to write a short, personal, and uplifting journal entry. Write in the first person (using 'I', 'my', 'me'). The entry should be reflective, positive, and end with a gentle, actionable piece of advice or a thought-provoking question for the day. Keep it concise, around 3-4 sentences.";
             const userQuery = "Write today's motivational journal entry for me.";
-            const apiKey = ""; // API key is handled by the environment if needed.
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
             const payload = {
                 contents: [{ parts: [{ text: userQuery }] }],
                 systemInstruction: { parts: [{ text: systemPrompt }] },
             };
 
-            let success = false;
-            let retries = 3;
-            let delay = 1000;
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
 
-            while(retries > 0 && !success) {
-                try {
-                    const response = await fetch(apiUrl, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-
-                    if (!response.ok) {
-                        throw new Error(`API call failed with status: ${response.status}`);
-                    }
-
-                    const result = await response.json();
-                    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
-                    
-                    if (text) {
-                        currentGeneratedEntry = text.trim();
-                        generatedText.innerText = currentGeneratedEntry;
-                        generatedEntryContainer.classList.remove('hidden');
-                        success = true;
-                    } else {
-                        throw new Error("Invalid response structure from AI model.");
-                    }
-                } catch (error) {
-                    console.error(`Error generating entry (retries left: ${retries-1}):`, error);
-                    retries--;
-                    if(retries > 0) {
-                        await new Promise(res => setTimeout(res, delay));
-                        delay *= 2; // Exponential backoff
-                    } else {
-                         generatedText.innerText = "Sorry, I couldn't generate an entry right now. Please try again in a moment.";
-                         generatedEntryContainer.classList.remove('hidden');
-                    }
+                if (!response.ok) {
+                    throw new Error(`API call failed with status: ${response.status}. Please check if your API key is correct and valid.`);
                 }
+
+                const result = await response.json();
+                const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                
+                if (text) {
+                    currentGeneratedEntry = text.trim();
+                    generatedText.innerText = currentGeneratedEntry;
+                    generatedEntryContainer.classList.remove('hidden');
+                } else {
+                    throw new Error("Invalid response structure from AI model.");
+                }
+            } catch (error) {
+                console.error(`Error generating entry:`, error);
+                generatedText.innerText = "Sorry, I couldn't generate an entry. Please check your API key and try again.";
+                generatedEntryContainer.classList.remove('hidden');
+            } finally {
+                loader.classList.add('hidden');
+                loader.classList.remove('flex');
+                generateBtn.disabled = false;
+                generateBtn.classList.remove('opacity-50', 'cursor-not-allowed');
             }
-            
-            loader.classList.add('hidden');
-            loader.classList.remove('flex');
-            generateBtn.disabled = false;
-            generateBtn.classList.remove('opacity-50', 'cursor-not-allowed');
         }
 
         // --- LocalStorage Database Functions ---
@@ -171,7 +206,7 @@
             saveBtn.innerText = "Saving...";
             
             const newEntry = {
-                id: Date.now().toString(), // Use timestamp as a simple unique ID
+                id: Date.now().toString(),
                 text: currentGeneratedEntry,
                 createdAt: new Date().toISOString()
             };
@@ -180,9 +215,6 @@
             entries.push(newEntry);
             saveEntriesToStorage(entries);
             
-            console.log("Entry saved to localStorage with ID:", newEntry.id);
-            
-            // Reset UI after saving
             currentGeneratedEntry = null;
             generatedEntryContainer.classList.add('hidden');
             generatedText.innerText = "";
@@ -190,12 +222,11 @@
             saveBtn.disabled = false;
             saveBtn.innerText = "Save Entry";
 
-            fetchAndRenderEntries(); // Re-render the list
+            fetchAndRenderEntries();
         }
 
         function fetchAndRenderEntries() {
             const entries = getEntriesFromStorage();
-            // Sort entries by date, newest first.
             entries.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
             renderEntries(entries);
         }
@@ -204,17 +235,16 @@
             let entries = getEntriesFromStorage();
             entries = entries.filter(entry => entry.id !== id);
             saveEntriesToStorage(entries);
-            console.log("Document successfully deleted from localStorage!");
-            fetchAndRenderEntries(); // Re-render the list
+            fetchAndRenderEntries();
         }
 
         function renderEntries(entries) {
-            journalHistory.innerHTML = ''; // Clear existing entries
+            journalHistory.innerHTML = '';
 
             if (entries.length === 0) {
                 journalHistory.appendChild(emptyState);
             } else {
-                if (emptyState) emptyState.remove();
+                if(emptyState.parentNode) emptyState.remove();
                 entries.forEach(entry => {
                     const entryDiv = document.createElement('div');
                     entryDiv.className = 'relative bg-white/60 p-4 rounded-lg shadow-sm animate-fade-in';
@@ -229,7 +259,7 @@
                     dateP.textContent = date;
                     
                     const textP = document.createElement('p');
-                    textP.className = 'text-gray-800 pr-10'; // Add padding to avoid text overlapping with button
+                    textP.className = 'text-gray-800 pr-10';
                     textP.textContent = entry.text;
                     
                     const deleteBtn = document.createElement('button');
@@ -249,6 +279,7 @@
         // --- Event Listeners ---
         generateBtn.addEventListener('click', generateJournalEntry);
         saveBtn.addEventListener('click', saveCurrentEntry);
+        saveApiKeyBtn.addEventListener('click', saveApiKey);
     </script>
 </body>
 </html>
